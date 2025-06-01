@@ -3,14 +3,19 @@ import Link from "next/link";
 import { followUser } from "../_lib/followUser";
 import { useFetchUser } from "../../_hook/useFetchUser";
 import { isFollowingUser } from "../_lib/isFollowingUser";
-import { getFollowerCount } from "../_lib/getFollowerCount";
 import Image from "next/image";
 
 interface FollowerData {
   follower_count: number;
 }
 
-export default function SearchList({ user }: any) {
+export default function SearchList({
+  user,
+  followerData,
+}: {
+  user: any;
+  followerData?: FollowerData;
+}) {
   const { user: me } = useFetchUser();
   const queryClient = useQueryClient();
 
@@ -18,14 +23,6 @@ export default function SearchList({ user }: any) {
     queryKey: ["users", user.id, "followStatus"],
     queryFn: () => isFollowingUser(user.id, me.id),
     enabled: !!me?.id && !!user?.id,
-  });
-
-  const { data: followerData } = useQuery<FollowerData>({
-    queryKey: ["users", user.id, "follows"],
-    queryFn: async () => {
-      const followerCount = await getFollowerCount(user.id);
-      return { follower_count: followerCount };
-    },
   });
 
   const followMutationQuery = useMutation({
