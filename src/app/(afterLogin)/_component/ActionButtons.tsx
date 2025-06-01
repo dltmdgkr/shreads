@@ -2,7 +2,7 @@
 
 import { TfiComment } from "react-icons/tfi";
 import { HiArrowPathRoundedSquare } from "react-icons/hi2";
-import { CiHeart, CiLocationArrow1 } from "react-icons/ci";
+import { CiHeart } from "react-icons/ci";
 import { FaHeart } from "react-icons/fa";
 import cx from "classnames";
 import { Post } from "@/model/Post";
@@ -50,7 +50,12 @@ export default function ActionButtons({ post }: { post: Post }) {
   const { mutate: likePost } = useMutation({
     mutationFn: (params: { postId: number; userId: string; liked: boolean }) =>
       postLike(params.postId, params.userId, params.liked),
+
     onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["posts"] });
+
+      const previousDataMap = new Map();
+
       const queryCache = queryClient.getQueryCache();
       const queryKeys = queryCache.getAll().map((cache) => cache.queryKey);
 
@@ -58,34 +63,38 @@ export default function ActionButtons({ post }: { post: Post }) {
         if (queryKey[0] === "posts") {
           const postData: Post | InfiniteData<Post[]> | undefined =
             queryClient.getQueryData(queryKey);
-          if (postData && "pages" in postData) {
-            const obj = postData.pages.flat().find((v) => v?.id === postId);
 
+          if (postData && "pages" in postData) {
+            previousDataMap.set(queryKey, structuredClone(postData));
+
+            const obj = postData.pages
+              .flat()
+              .find((v) => v?.id === variables.postId);
             if (obj) {
               const pageIndex = postData.pages.findIndex((page) =>
                 page?.includes(obj)
               );
               const index = postData.pages[pageIndex]?.findIndex(
-                (page) => page.id === postId
+                (page) => page.id === variables.postId
               );
               if (index !== undefined && index > -1) {
                 const updatedPages = [...postData.pages];
-                if (updatedPages[pageIndex]) {
-                  updatedPages[pageIndex] = [...updatedPages[pageIndex]!];
-                  updatedPages[pageIndex]![index] = {
-                    ...updatedPages[pageIndex]![index]!,
-                    like_count: variables.liked
-                      ? updatedPages[pageIndex]![index]!.like_count + 1
-                      : updatedPages[pageIndex]![index]!.like_count - 1,
-                  };
-                }
+                updatedPages[pageIndex] = [...updatedPages[pageIndex]!];
+                updatedPages[pageIndex]![index] = {
+                  ...updatedPages[pageIndex]![index]!,
+                  like_count: variables.liked
+                    ? updatedPages[pageIndex]![index]!.like_count + 1
+                    : updatedPages[pageIndex]![index]!.like_count - 1,
+                };
                 queryClient.setQueryData(queryKey, {
                   ...postData,
                   pages: updatedPages,
                 });
               }
             }
-          } else if (postData && postData.id === postId) {
+          } else if (postData && postData.id === variables.postId) {
+            previousDataMap.set(queryKey, structuredClone(postData));
+
             queryClient.setQueryData(queryKey, {
               ...postData,
               like_count: variables.liked
@@ -95,13 +104,22 @@ export default function ActionButtons({ post }: { post: Post }) {
           }
         }
       });
+
+      return { previousDataMap };
     },
+
     onError: (err, variables, context) => {
       console.error("Error updating like:", err);
+      context?.previousDataMap?.forEach((data, key) => {
+        queryClient.setQueryData(key, data);
+      });
     },
+
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["likes", user.id, postId] });
+      queryClient.invalidateQueries({
+        queryKey: ["likes", user.id, postId],
+      });
     },
   });
 
@@ -111,7 +129,12 @@ export default function ActionButtons({ post }: { post: Post }) {
       postId: number;
       reposted: boolean;
     }) => repostPost(params.userId, params.postId, params.reposted),
+
     onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["posts"] });
+
+      const previousDataMap = new Map();
+
       const queryCache = queryClient.getQueryCache();
       const queryKeys = queryCache.getAll().map((cache) => cache.queryKey);
 
@@ -121,35 +144,36 @@ export default function ActionButtons({ post }: { post: Post }) {
             queryClient.getQueryData(queryKey);
 
           if (postData && "pages" in postData) {
-            const obj = postData.pages.flat().find((v) => v?.id === postId);
+            previousDataMap.set(queryKey, structuredClone(postData));
 
+            const obj = postData.pages
+              .flat()
+              .find((v) => v?.id === variables.postId);
             if (obj) {
               const pageIndex = postData.pages.findIndex((page) =>
                 page?.includes(obj)
               );
               const index = postData.pages[pageIndex]?.findIndex(
-                (page) => page?.id === postId
+                (page) => page?.id === variables.postId
               );
 
               if (index !== undefined && index > -1) {
                 const updatedPages = [...postData.pages];
-                if (updatedPages[pageIndex] && updatedPages[pageIndex][index]) {
-                  updatedPages[pageIndex] = [...updatedPages[pageIndex]];
-                  updatedPages[pageIndex][index] = {
-                    ...updatedPages[pageIndex][index]!,
-                    repost_count: variables.reposted
-                      ? updatedPages[pageIndex][index].repost_count + 1
-                      : updatedPages[pageIndex][index].repost_count - 1,
-                  };
-                }
-
+                updatedPages[pageIndex] = [...updatedPages[pageIndex]];
+                updatedPages[pageIndex][index] = {
+                  ...updatedPages[pageIndex][index]!,
+                  repost_count: variables.reposted
+                    ? updatedPages[pageIndex][index].repost_count + 1
+                    : updatedPages[pageIndex][index].repost_count - 1,
+                };
                 queryClient.setQueryData(queryKey, {
                   ...postData,
                   pages: updatedPages,
                 });
               }
             }
-          } else if (postData && postData.id === postId) {
+          } else if (postData && postData.id === variables.postId) {
+            previousDataMap.set(queryKey, structuredClone(postData));
             queryClient.setQueryData(queryKey, {
               ...postData,
               repost_count: variables.reposted
@@ -159,10 +183,17 @@ export default function ActionButtons({ post }: { post: Post }) {
           }
         }
       });
+
+      return { previousDataMap };
     },
+
     onError: (err, variables, context) => {
       console.error("Error updating repost:", err);
+      context?.previousDataMap?.forEach((data, key) => {
+        queryClient.setQueryData(key, data);
+      });
     },
+
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["posts"] });
       queryClient.invalidateQueries({ queryKey: ["reposts", user.id] });
